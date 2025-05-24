@@ -1,0 +1,156 @@
+eks_msk_poc/
+├── terraform/
+│   ├── main.tf
+│   ├── variables.tf
+│   ├── outputs.tf
+│   └── sg_msk_allow_eks.tf
+├── k8s/
+│   └── kafka-app-deployment.yaml
+├── README.md
+
+# main.tf
+provider "aws" {
+  region = "us-east-1"
+}
+
+data "aws_vpc" "default" {
+  default = true
+}
+
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+}
+
+module "eks" {
+  source  = "terraform-aws-modules/eks/aws"
+  version = "20.8.4"
+
+  cluster_name    = "eks-demo"
+  cluster_version = "1.29"
+
+  vpc_id     = data.aws_vpc.default.id
+  subnet_ids = data.aws_subnets.default.ids
+
+  eks_managed_node_groups = {
+    default = {
+      desired_capacity = 1
+      min_capacity     = 1
+      max_capacity     = 2
+      instance_types   = ["t3.medium"]
+    }
+  }
+
+  tags = {
+    Project = "demo"
+  }
+}
+
+# sg_msk_allow_eks.tf
+resource "aws_security_group_rule" "allow_eks_to_msk" {
+  type                     = "ingress"
+  from_port                = 9092
+  to_port                  = 9092
+  protocol                 = "tcp"
+  security_group_id        = "sg-xxxxxxxx"  # Replace with your MSK SG ID
+  source_security_group_id = module.eks.node_security_group_id
+}
+
+# outputs.tf
+output "cluster_name" {
+  value = module.eks.cluster_name
+}
+
+output "kubeconfig_filename" {
+  value = module.eks.kubeconfig_filename
+}
+
+# k8s/kafka-app-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-producer
+  labels:
+    app: kafka-producer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-producer
+  template:
+    metadata:
+      labels:
+        app: kafka-producer
+    spec:
+      containers:
+        - name: app
+          image: your-dockerhub-id/kafka-demo:latest
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "b-1.msk-cluster.abcd.kafka.us-east-1.amazonaws.com:9092"
+
+# README.md
+## EKS + MSK Demo Setup
+
+### 1. Deploy EKS with Terraform
+```bash
+cd terraform
+terraform init
+terraform apply
+```
+
+### 2. Connect to EKS
+```bash
+aws eks --region us-east-1 update-kubeconfig --name eks-demo
+```
+
+### 3. Deploy Sample Kafka App
+```bash
+kubectl apply -f ../k8s/kafka-app-deployment.yaml
+```
+
+### 4. Verify Logs
+```bash
+kubectl logs -l app=kafka-producer
+```
+
+---
+
+Update `sg-xxxxxxxx` in Terraform with your MSK Security Group ID.
+Update Kafka broker hostname in the deployment YAML.
+
+
+Done bro! Your GitHub-ready structure for the EKS + MSK POC setup is created. It includes:
+
+Terraform setup for EKS and MSK SG rule
+
+Kubernetes YAML for deploying your Spring Boot Camel Kafka app
+
+README with full usage instructions
+
+
+You can now:
+
+1. Replace sg-xxxxxxxx with your MSK SG ID.
+
+
+2. Push this to GitHub.
+
+
+3. terraform apply, then kubectl apply.
+
+
+
+Let me know if you want to include:
+
+Sample Dockerfile for the app
+
+Kafka consumer setup
+
+Helm chart structure later on
+
+
+I'm here for that next step whenever you're ready.
+
